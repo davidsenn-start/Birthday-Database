@@ -1,0 +1,29 @@
+name: Slack Birthday Bot
+
+on:
+  schedule:
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download repository
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run birthday bot
+        run: python birthday_bot.py
+        env:
+          SLACK_TOKEN: ${{ secrets.SLACK_TOKEN }}
+          SOURCE_CHANNEL_ID: ${{ vars.SOURCE_CHANNEL_ID }}
+          ANNOUNCE_CHANNEL_ID: ${{ vars.ANNOUNCE_CHANNEL_ID }}
