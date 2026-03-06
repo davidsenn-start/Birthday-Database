@@ -1,5 +1,6 @@
 import os
 import time
+import random
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -7,28 +8,33 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from tabulate import tabulate
 
-# ---- CONFIG (via env) ----
 SLACK_TOKEN = os.environ["SLACK_TOKEN"]
-SOURCE_CHANNEL_ID = os.environ["SOURCE_CHANNEL_ID"]          # channel to scan members from
-ANNOUNCE_CHANNEL_ID = os.environ["ANNOUNCE_CHANNEL_ID"]      # channel to post public message in
+SOURCE_CHANNEL_ID = os.environ["SOURCE_CHANNEL_ID"]
+ANNOUNCE_CHANNEL_ID = os.environ["ANNOUNCE_CHANNEL_ID"]
 BIRTHDAY_FIELD_ID = os.environ.get("BIRTHDAY_FIELD_ID", "Xf05STPV0Z3R")
 PROFILE_DELAY = float(os.environ.get("PROFILE_FETCH_DELAY_SECONDS", "0.2"))
 TZ = os.environ.get("TZ_NAME", "Europe/Lisbon")
 
-DM_TEMPLATE = os.environ.get(
-    "DM_TEMPLATE",
-    "Happy Birthday, {name}! 🎉🥳 Hope you have an amazing day!"
-)
-CHANNEL_TEMPLATE = os.environ.get(
-    "CHANNEL_TEMPLATE",
-    "🎂 Happy Birthday {mentions}! 🎉"
-)
+DM_TEMPLATES = [
+    "Happy birthday, {name}! 🎉 Another year older and definitely another year wiser! We at START Lisbon are really grateful to have you as part of the community and hope your day is filled with great moments, good company, and maybe even some cake. Wishing you lots of success, happiness, and exciting opportunities in the year ahead! 💙",
+    "Happy birthday, {name}! 🎂 One more year of experiences, stories, and achievements added to the journey! Everyone at START Lisbon is lucky to have you with us, and we hope today brings you plenty of smiles, celebrations, and a well-deserved moment to enjoy your special day. Cheers to an amazing year ahead! 💙",
+    "Happy birthday, {name}! 🎈 Another trip around the sun and another milestone worth celebrating! We at START Lisbon are happy to have you as part of the team and wish you a day full of laughter, appreciation, and a bit of birthday magic. May the coming year bring you exciting ideas, new opportunities, and plenty of reasons to celebrate! 💙",
+    "Happy birthday, {name}! 🥳 Time to celebrate another fantastic year of you! The START Lisbon community is grateful to have you around and hopes your birthday is filled with joy, good vibes, and maybe a surprise or two. Wishing you all the best today and a year ahead full of inspiration, growth, and memorable moments! 💙",
+    "Happy birthday, {name}! 🎉 Today is the perfect excuse to celebrate you and everything you bring to START Lisbon. We’re really glad to have you as part of the community and hope your special day is packed with happiness, great conversations, and well-deserved celebrations. Here’s to a wonderful year ahead filled with success and great experiences! 💙",
+]
+
+CHANNEL_TEMPLATES = [
+    "WOOOW! It’s {name}’s special day! 🎉 Make sure to congratulate them today, everyone. We at START Lisbon are really happy to have you with us and look forward to another great semester together! 💙",
+    "Hold up — it’s {name}’s birthday today! 🎂 Don’t forget to send some birthday wishes their way. START Lisbon is lucky to have you, {name}, and we’re excited for another amazing semester together! 💙",
+    "Attention everyone! 🥳 Today we celebrate {name}! Make sure to drop a birthday message and spread the birthday cheer. We at START Lisbon are super happy to have you in the community! 💙",
+    "Big news today — it’s {name}’s birthday! 🎈 Let’s make sure they feel the love and send some congratulations. START Lisbon is glad to have you with us, and we’re excited for the times ahead! 💙",
+    "Guess what? It’s {name}’s special day! 🎉 Be sure to wish them a happy birthday when you see them. The START Lisbon community is lucky to have you, {name}, and we’re looking forward to another great semester! 💙",
+]
 
 client = WebClient(token=SLACK_TOKEN)
 
 
 def call(fn, **kwargs):
-    """Retry on Slack rate limits (HTTP 429)."""
     while True:
         try:
             return fn(**kwargs)
@@ -50,10 +56,9 @@ def all_members(channel_id: str) -> list[str]:
 
 
 def month_day(raw: str):
-    """Parse lots of common date formats; return (month, day) or None."""
     if not raw:
         return None
-    s = raw.strip().split("T", 1)[0]  # allow ISO-ish timestamps
+    s = raw.strip().split("T", 1)[0]
     for fmt in (
         "%Y-%m-%d", "%Y/%m/%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y", "%m-%d-%Y",
         "%m/%d", "%d/%m", "%m-%d", "%d-%m",
@@ -68,16 +73,24 @@ def month_day(raw: str):
 
 def dm_user(user_id: str, name: str):
     dm = call(client.conversations_open, users=user_id)["channel"]["id"]
-    call(client.chat_postMessage, channel=dm, text=DM_TEMPLATE.format(name=name or "there"))
+    message = random.choice(DM_TEMPLATES).format(name=name or "there")
+    call(client.chat_postMessage, channel=dm, text=message)
 
 
-def announce(user_ids: list[str]):
-    mentions = ", ".join(f"<@{u}>" for u in user_ids)
-    call(client.chat_postMessage, channel=ANNOUNCE_CHANNEL_ID, text=CHANNEL_TEMPLATE.format(mentions=mentions))
+def announce(user_ids: list[str], names: list[str]):
+    for uid, name in zip(user_ids, names):
+        message = random.choice(CHANNEL_TEMPLATES).format(name=name)
+        call(client.chat_postMessage, channel=ANNOUNCE_CHANNEL_ID, text=message)
 
 
 def main():
-    today = datetime.now(ZoneInfo(TZ)).date()
+    now = datetime.now(ZoneInfo(TZ))
+
+    if now.hour != 9:
+        print(f"Skipping run: local time is {now.strftime('%H:%M')} in {TZ}, not 09:00.")
+        return
+
+    today = now.date()
     today_md = (today.month, today.day)
 
     rows, birthdays = [], []
@@ -103,13 +116,17 @@ def main():
     print(f"\nTotal users processed: {len(rows)} | Birthdays today: {len(birthdays)}")
 
     if birthdays:
+        user_ids = [uid for uid, _ in birthdays]
+        names = [name for _, name in birthdays]
+
         for uid, name in birthdays:
             try:
                 dm_user(uid, name)
             except SlackApiError as e:
                 print(f"DM error for {uid}: {e.response['error']}")
+
         try:
-            announce([uid for uid, _ in birthdays])
+            announce(user_ids, names)
         except SlackApiError as e:
             print(f"Announce error: {e.response['error']}")
 
