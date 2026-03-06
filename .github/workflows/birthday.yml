@@ -2,6 +2,7 @@ name: Slack Birthday Bot
 
 on:
   schedule:
+    - cron: "0 8 * * *"
     - cron: "0 9 * * *"
   workflow_dispatch:
 
@@ -10,10 +11,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -27,3 +28,4 @@ jobs:
           SLACK_TOKEN: ${{ secrets.SLACK_TOKEN }}
           SOURCE_CHANNEL_ID: ${{ vars.SOURCE_CHANNEL_ID }}
           ANNOUNCE_CHANNEL_ID: ${{ vars.ANNOUNCE_CHANNEL_ID }}
+          TZ_NAME: Europe/Lisbon
