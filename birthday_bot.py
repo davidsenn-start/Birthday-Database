@@ -86,9 +86,11 @@ def announce(user_ids: list[str], names: list[str]):
 def main():
     now = datetime.now(ZoneInfo(TZ))
 
-    if now.hour != 9:
-        print(f"Skipping run: local time is {now.strftime('%H:%M')} in {TZ}, not 09:00.")
-        return
+    #if now.hour != 9:
+        #print(f"Skipping run: local time is {now.strftime('%H:%M')} in {TZ}, not 09:00.")
+        #return
+
+    print(f"Test run at {now.strftime('%H:%M')} in {TZ}")
 
     today = now.date()
     today_md = (today.month, today.day)
